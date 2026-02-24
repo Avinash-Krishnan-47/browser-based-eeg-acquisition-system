@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EEG Acquisition System | NIT Tiruchirappalli</title>
+    <link rel="stylesheet" href="/static/styles.css">
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+</head>
+<body>
+    <!-- Loading Screen -->
+    <div id="loadingScreen" class="loading-screen">
+        <div class="loading-content">
+            <div class="brain-loader">🧠</div>
+            <h2>Initializing EEG System</h2>
+            <div class="loading-bar">
+                <div class="loading-progress"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-content">
+                <div class="logo-section">
+                    <div class="brain-icon">🧠</div>
+                    <div class="title-group">
+                        <h1 class="main-title">EEG Acquisition System</h1>
+                        <p class="subtitle">National Institute of Technology, Tiruchirappalli</p>
+                        <p class="guide-info">Dept. of ICE | Guide: Prof. V. Sridevi</p>
+                    </div>
+                </div>
+                <div class="status-group">
+                    <div class="status-card">
+                        <div class="status-indicator" id="connectionStatus">
+                            <span class="status-dot"></span>
+                            <div class="status-info">
+                                <span class="status-label">Connection</span>
+                                <span class="status-text">Connecting...</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <div class="main-wrapper">
+            <!-- Sidebar -->
+            <aside class="sidebar">
+                <div class="sidebar-content">
+                    <!-- File Upload Section -->
+                    <section class="control-section upload-section">
+                        <h3 class="section-title">
+                            <span class="icon">📁</span>
+                            Data Source
+                        </h3>
+                        <div class="upload-zone" id="uploadZone">
+                            <input type="file" id="fileInput" accept=".edf" hidden>
+                            <label for="fileInput" class="upload-label">
+                                <div class="upload-icon">📊</div>
+                                <div class="upload-text">
+                                    <strong>Click to upload EDF file</strong>
+                                    <span>or drag and drop here</span>
+                                </div>
+                            </label>
+                        </div>
+                        
+                        <div class="file-metadata" id="fileMetadata" style="display: none;">
+                            <div class="metadata-header">
+                                <span class="metadata-title">File Information</span>
+                            </div>
+                            <div class="metadata-grid">
+                                <div class="metadata-item">
+                                    <span class="meta-label">Filename:</span>
+                                    <span class="meta-value" id="metaFilename">-</span>
+                                </div>
+                                <div class="metadata-item">
+                                    <span class="meta-label">Channels:</span>
+                                    <span class="meta-value" id="metaChannels">-</span>
+                                </div>
+                                <div class="metadata-item">
+                                    <span class="meta-label">Sampling Rate:</span>
+                                    <span class="meta-value" id="metaSamplingRate">-</span>
+                                </div>
+                                <div class="metadata-item">
+                                    <span class="meta-label">Duration:</span>
+                                    <span class="meta-value" id="metaDuration">-</span>
+                                </div>
+                                <div class="metadata-item">
+                                    <span class="meta-label">Samples:</span>
+                                    <span class="meta-value" id="metaSamples">-</span>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
+                    <!-- Playback Controls -->
+                    <section class="control-section">
+                        <h3 class="section-title">
+                            <span class="icon">⏯️</span>
+                            Playback Control
+                        </h3>
+                        <div class="playback-grid">
+                            <button class="control-btn btn-start" id="btnStart" disabled>
+                                <span class="btn-icon">▶</span>
+                                <span>Start</span>
+                            </button>
+                            <button class="control-btn btn-pause" id="btnPause" disabled>
+                                <span class="btn-icon">⏸</span>
+                                <span>Pause</span>
+                            </button>
+                            <button class="control-btn btn-stop" id="btnStop" disabled>
+                                <span class="btn-icon">⏹</span>
+                                <span>Stop</span>
+                            </button>
+                        </div>
+                        <div class="stream-indicator" id="streamIndicator">
+                            <div class="indicator-dot"></div>
+                            <span class="indicator-text">Idle</span>
+                        </div>
+                    </section>
+
+                    <!-- Filter Controls -->
+                    <section class="control-section">
+                        <h3 class="section-title">
+                            <span class="icon">🎚️</span>
+                            Signal Filters
+                        </h3>
+                        
+                        <!-- High-Pass Filter -->
+                        <div class="filter-card">
+                            <div class="filter-header">
+                                <label class="filter-toggle">
+                                    <input type="checkbox" id="filterHighpass" class="toggle-input">
+                                    <span class="toggle-slider"></span>
+                                    <span class="filter-name">High-Pass Filter</span>
+                                </label>
+                            </div>
+                            <div class="filter-body">
+                                <div class="input-group">
+                                    <input type="number" id="inputHighpass" class="filter-input" 
+                                           value="0.5" min="0.1" max="10" step="0.1">
+                                    <span class="input-suffix">Hz</span>
+                                </div>
+                                <span class="filter-hint">Remove baseline drift</span>
+                            </div>
+                        </div>
+
+                        <!-- Low-Pass Filter -->
+                        <div class="filter-card">
+                            <div class="filter-header">
+                                <label class="filter-toggle">
+                                    <input type="checkbox" id="filterLowpass" class="toggle-input">
+                                    <span class="toggle-slider"></span>
+                                    <span class="filter-name">Low-Pass Filter</span>
+                                </label>
+                            </div>
+                            <div class="filter-body">
+                                <div class="input-group">
+                                    <input type="number" id="inputLowpass" class="filter-input" 
+                                           value="40" min="10" max="100" step="1">
+                                    <span class="input-suffix">Hz</span>
+                                </div>
+                                <span class="filter-hint">Remove high-freq noise</span>
+                            </div>
+                        </div>
+
+                        <!-- Notch Filter -->
+                        <div class="filter-card">
+                            <div class="filter-header">
+                                <label class="filter-toggle">
+                                    <input type="checkbox" id="filterNotch" class="toggle-input">
+                                    <span class="toggle-slider"></span>
+                                    <span class="filter-name">Notch Filter</span>
+                                </label>
+                            </div>
+                            <div class="filter-body">
+                                <div class="input-group">
+                                    <select id="selectNotch" class="filter-select">
+                                        <option value="50">50 Hz</option>
+                                        <option value="60">60 Hz</option>
+                                    </select>
+                                </div>
+                                <span class="filter-hint">Remove power line noise</span>
+                            </div>
+                        </div>
+
+                        <button class="btn-apply-filters" id="btnApplyFilters">
+                            <span>Apply Filters</span>
+                        </button>
+                    </section>
+
+                    <!-- Display Settings -->
+                    <section class="control-section">
+                        <h3 class="section-title">
+                            <span class="icon">📐</span>
+                            Display Settings
+                        </h3>
+                        
+                        <div class="setting-item">
+                            <label class="setting-label">Amplitude Scale</label>
+                            <select id="selectAmplitude" class="setting-select">
+                                <option value="10">10 μV/cm</option>
+                                <option value="20" selected>20 μV/cm</option>
+                                <option value="50">50 μV/cm</option>
+                                <option value="100">100 μV/cm</option>
+                                <option value="200">200 μV/cm</option>
+                            </select>
+                        </div>
+
+                        <div class="setting-item">
+                            <label class="setting-label">Time Window</label>
+                            <select id="selectTimeWindow" class="setting-select">
+                                <option value="5">5 seconds</option>
+                                <option value="10" selected>10 seconds</option>
+                                <option value="15">15 seconds</option>
+                                <option value="20">20 seconds</option>
+                                <option value="30">30 seconds</option>
+                            </select>
+                        </div>
+                    </section>
+
+                    <!-- Active Filters -->
+                    <section class="control-section">
+                        <h3 class="section-title">
+                            <span class="icon">✓</span>
+                            Active Filters
+                        </h3>
+                        <div id="activeFiltersDisplay" class="active-filters">
+                            <p class="no-filters-text">No filters applied</p>
+                        </div>
+                    </section>
+                </div>
+            </aside>
+
+            <!-- Main Visualization Area -->
+            <main class="main-area">
+                <div class="viz-header">
+                    <h2 class="viz-title">EEG Signal Visualization</h2>
+                    <div class="viz-info">
+                        <div class="time-display" id="timeDisplay">
+                            <span class="time-label">Time:</span>
+                            <span class="time-value">0.00s</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="plot-wrapper" id="plotWrapper">
+                    <div class="plot-placeholder" id="plotPlaceholder">
+                        <div class="placeholder-content">
+                            <div class="placeholder-icon">📈</div>
+                            <h3>No Data Available</h3>
+                            <p>Upload an EDF file to begin visualization</p>
+                        </div>
+                    </div>
+                    <div id="plotContainer" style="display: none; width: 100%; height: 100%;"></div>
+                </div>
+            </main>
+        </div>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <div class="footer-content">
+                <p class="footer-text">
+                    Final Year Project | Department of Instrumentation and Control Engineering
+                </p>
+                <p class="footer-text">
+                    Guided by: <strong>Prof. V. Sridevi</strong> | NIT Tiruchirappalli
+                </p>
+            </div>
+        </footer>
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="toast"></div>
+
+    <!-- Scripts -->
+    <script src="/static/script.js"></script>
+</body>
+</html>
