@@ -54,7 +54,7 @@
                     <section class="control-section upload-section">
                         <h3 class="section-title">
                             <span class="icon">📁</span>
-                            Data Source
+                            EDF File Upload
                         </h3>
                         <div class="upload-zone" id="uploadZone">
                             <input type="file" id="fileInput" accept=".edf" hidden>
@@ -92,6 +92,63 @@
                                     <span class="meta-label">Samples:</span>
                                     <span class="meta-value" id="metaSamples">-</span>
                                 </div>
+                            </div>
+                        </div>
+                    </section>
+
+                    <!-- USB Connection Section -->
+                    <section class="control-section">
+                        <h3 class="section-title">
+                            <span class="icon">🔌</span>
+                            USB Live Streaming
+                        </h3>
+                        
+                        <div class="usb-status" id="usbStatus">
+                            <div class="status-badge usb-disconnected">Disconnected</div>
+                        </div>
+                        
+                        <div class="usb-config" id="usbConfig">
+                            <div class="setting-item">
+                                <label class="setting-label">Serial Port</label>
+                                <select id="selectSerialPort" class="setting-select">
+                                    <option value="">Select Port...</option>
+                                </select>
+                                <button class="refresh-ports-btn" id="btnRefreshPorts">
+                                    <span>🔄 Refresh Ports</span>
+                                </button>
+                            </div>
+
+                            <div class="setting-item">
+                                <label class="setting-label">Baud Rate</label>
+                                <select id="selectBaudRate" class="setting-select">
+                                    <option value="9600">9600</option>
+                                    <option value="115200" selected>115200</option>
+                                    <option value="230400">230400</option>
+                                    <option value="460800">460800</option>
+                                </select>
+                            </div>
+
+                            <div class="setting-item">
+                                <label class="setting-label">Channels</label>
+                                <input type="number" id="inputChannels" class="filter-input" 
+                                       value="8" min="1" max="16">
+                            </div>
+
+                            <div class="setting-item">
+                                <label class="setting-label">Sampling Rate (Hz)</label>
+                                <input type="number" id="inputSamplingRate" class="filter-input" 
+                                       value="250" min="100" max="1000" step="50">
+                            </div>
+
+                            <div class="usb-buttons">
+                                <button class="btn-usb-connect" id="btnUSBConnect">
+                                    <span class="btn-icon">🔌</span>
+                                    <span>Connect USB</span>
+                                </button>
+                                <button class="btn-usb-disconnect" id="btnUSBDisconnect" style="display: none;">
+                                    <span class="btn-icon">⏏</span>
+                                    <span>Disconnect</span>
+                                </button>
                             </div>
                         </div>
                     </section>
@@ -222,6 +279,29 @@
                         </div>
                     </section>
 
+                    <!-- Export Section -->
+                    <section class="control-section">
+                        <h3 class="section-title">
+                            <span class="icon">💾</span>
+                            Export Filtered Data
+                        </h3>
+                        
+                        <div class="export-info" id="exportInfo">
+                            <p class="export-status">Stream data to enable export</p>
+                        </div>
+                        
+                        <div class="export-buttons">
+                            <button class="export-btn" id="btnExportCSV" disabled>
+                                <span class="btn-icon">📄</span>
+                                <span>Export as CSV</span>
+                            </button>
+                            <button class="export-btn" id="btnExportEDF" disabled>
+                                <span class="btn-icon">📊</span>
+                                <span>Export as EDF</span>
+                            </button>
+                        </div>
+                    </section>
+
                     <!-- Active Filters -->
                     <section class="control-section">
                         <h3 class="section-title">
@@ -238,7 +318,7 @@
             <!-- Main Visualization Area -->
             <main class="main-area">
                 <div class="viz-header">
-                    <h2 class="viz-title">EEG Signal Visualization</h2>
+                    <h2 class="viz-title">EEG Signal Comparison</h2>
                     <div class="viz-info">
                         <div class="time-display" id="timeDisplay">
                             <span class="time-label">Time:</span>
@@ -247,15 +327,46 @@
                     </div>
                 </div>
 
-                <div class="plot-wrapper" id="plotWrapper">
-                    <div class="plot-placeholder" id="plotPlaceholder">
-                        <div class="placeholder-content">
-                            <div class="placeholder-icon">📈</div>
-                            <h3>No Data Available</h3>
-                            <p>Upload an EDF file to begin visualization</p>
+                <div class="dual-plot-container">
+                    <!-- Original Signal Plot -->
+                    <div class="plot-section">
+                        <div class="plot-header">
+                            <h3 class="plot-title">
+                                <span class="signal-indicator original"></span>
+                                Original Signal
+                            </h3>
+                        </div>
+                        <div class="plot-wrapper" id="plotWrapperOriginal">
+                            <div class="plot-placeholder" id="plotPlaceholderOriginal">
+                                <div class="placeholder-content">
+                                    <div class="placeholder-icon">📈</div>
+                                    <h3>No Data Available</h3>
+                                    <p>Upload EDF file or connect USB device</p>
+                                </div>
+                            </div>
+                            <div id="plotContainerOriginal" style="display: none; width: 100%; height: 100%;"></div>
                         </div>
                     </div>
-                    <div id="plotContainer" style="display: none; width: 100%; height: 100%;"></div>
+
+                    <!-- Filtered Signal Plot -->
+                    <div class="plot-section">
+                        <div class="plot-header">
+                            <h3 class="plot-title">
+                                <span class="signal-indicator filtered"></span>
+                                Filtered Signal
+                            </h3>
+                        </div>
+                        <div class="plot-wrapper" id="plotWrapperFiltered">
+                            <div class="plot-placeholder" id="plotPlaceholderFiltered">
+                                <div class="placeholder-content">
+                                    <div class="placeholder-icon">📊</div>
+                                    <h3>No Data Available</h3>
+                                    <p>Apply filters to see results</p>
+                                </div>
+                            </div>
+                            <div id="plotContainerFiltered" style="display: none; width: 100%; height: 100%;"></div>
+                        </div>
+                    </div>
                 </div>
             </main>
         </div>

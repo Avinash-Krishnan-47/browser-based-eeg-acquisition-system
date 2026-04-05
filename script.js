@@ -1,8 +1,3 @@
-/**
- * EEG Acquisition System - Frontend Application
- * FastAPI WebSocket Client Implementation
- */
-
 // Configuration
 const CONFIG = {
     API_URL: 'http://localhost:8000',
@@ -17,16 +12,24 @@ const state = {
     websocket: null,
     isConnected: false,
     reconnectAttempts: 0,
+    usbMode: false,
     eegData: {
-        channels: [],
+        original: {
+            channels: [],
+            timeData: []
+        },
+        filtered: {
+            channels: [],
+            timeData: []
+        },
         channelNames: [],
-        timeData: [],
         maxPoints: 2500,
         samplingRate: 250,
-        isStreaming: false
+        isStreaming: false,
+        hasFilteredData: false
     },
     plotConfig: {
-        amplitudeScale: 5,
+        amplitudeScale: 20,
         timeWindow: 10,
         maxAmplitude: 200
     },
@@ -35,24 +38,18 @@ const state = {
 
 // ===== Initialization =====
 document.addEventListener('DOMContentLoaded', () => {
-    console.log('🧠 EEG Acquisition System Initializing...');
+    console.log('🧠 EEG Acquisition System with USB Initializing...');
     
-    // Hide loading screen
     setTimeout(() => {
-        const loadingScreen = document.getElementById('loadingScreen');
-        loadingScreen.classList.add('hidden');
+        document.getElementById('loadingScreen').classList.add('hidden');
     }, 1500);
     
-    // Initialize WebSocket
     initializeWebSocket();
-    
-    // Setup event listeners
     setupEventListeners();
-    
-    // Setup drag and drop
     setupDragAndDrop();
+    loadSerialPorts();
     
-    console.log('✅ System Ready');
+    console.log('✅ System Ready with USB Support');
 });
 
 // ===== WebSocket Management =====
@@ -96,7 +93,7 @@ function handleWebSocketMessage(event) {
                 break;
             
             case 'stream_status':
-                handleStreamStatus(message.status);
+                handleStreamStatus(message.status, message.mode);
                 break;
             
             case 'filter_status':
@@ -125,7 +122,6 @@ function handleWebSocketClose() {
     state.isConnected = false;
     updateConnectionStatus(false);
     
-    // Attempt reconnection
     if (state.reconnectAttempts < CONFIG.MAX_RECONNECT_ATTEMPTS) {
         state.reconnectAttempts++;
         console.log(`Reconnecting... Attempt ${state.reconnectAttempts}`);
@@ -148,22 +144,112 @@ function sendWebSocketMessage(data) {
     }
 }
 
+// ===== USB Functions =====
+async function loadSerialPorts() {
+    try {
+        const response = await fetch(`${CONFIG.API_URL}/api/serial-ports`);
+        const data = await response.json();
+        
+        const select = document.getElementById('selectSerialPort');
+        select.innerHTML = '<option value="">Select Port...</option>';
+        
+        data.ports.forEach(port => {
+            const option = document.createElement('option');
+            option.value = port.device;
+            option.textContent = `${port.device} - ${port.description}`;
+            select.appendChild(option);
+        });
+        
+        console.log(`Found ${data.ports.length} serial ports`);
+        
+    } catch (error) {
+        console.error('Error loading serial ports:', error);
+    }
+}
+
+async function connectUSB() {
+    const port = document.getElementById('selectSerialPort').value;
+    const baudrate = parseInt(document.getElementById('selectBaudRate').value);
+    const n_channels = parseInt(document.getElementById('inputChannels').value);
+    const sampling_rate = parseInt(document.getElementById('inputSamplingRate').value);
+    
+    if (!port) {
+        showToast('Please select a serial port', 'warning');
+        return;
+    }
+    
+    console.log('🔌 Connecting to USB...', {port, baudrate, n_channels, sampling_rate});
+    showToast('Connecting to USB device...', 'info');
+    
+    try {
+        const response = await fetch(`${CONFIG.API_URL}/api/usb/connect`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({port, baudrate, n_channels, sampling_rate})
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            state.usbMode = true;
+            state.eegData.channelNames = Array.from({length: n_channels}, (_, i) => `CH${i+1}`);
+            state.eegData.samplingRate = sampling_rate;
+            state.eegData.original.channels = new Array(n_channels).fill(null).map(() => []);
+            state.eegData.filtered.channels = new Array(n_channels).fill(null).map(() => []);
+            
+            updateMaxPoints();
+            initializePlots();
+            
+            document.getElementById('usbStatus').innerHTML = '<div class="status-badge usb-connected">Connected</div>';
+            document.getElementById('btnUSBConnect').style.display = 'none';
+            document.getElementById('btnUSBDisconnect').style.display = 'block';
+            document.getElementById('btnStart').disabled = false;
+            
+            showToast('USB device connected!', 'success');
+        }
+        
+    } catch (error) {
+        console.error('USB connection error:', error);
+        showToast('Failed to connect USB device', 'error');
+    }
+}
+
+async function disconnectUSB() {
+    try {
+        await fetch(`${CONFIG.API_URL}/api/usb/disconnect`, {method: 'POST'});
+        
+        state.usbMode = false;
+        document.getElementById('usbStatus').innerHTML = '<div class="status-badge usb-disconnected">Disconnected</div>';
+        document.getElementById('btnUSBConnect').style.display = 'block';
+        document.getElementById('btnUSBDisconnect').style.display = 'none';
+        
+        showToast('USB device disconnected', 'info');
+        
+    } catch (error) {
+        console.error('USB disconnection error:', error);
+    }
+}
+
 // ===== Event Listeners Setup =====
 function setupEventListeners() {
-    // File upload
     document.getElementById('fileInput').addEventListener('change', handleFileSelect);
     
-    // Playback controls
     document.getElementById('btnStart').addEventListener('click', startStreaming);
     document.getElementById('btnPause').addEventListener('click', pauseStreaming);
     document.getElementById('btnStop').addEventListener('click', stopStreaming);
     
-    // Filter controls
     document.getElementById('btnApplyFilters').addEventListener('click', applyFilters);
     
-    // Display settings
     document.getElementById('selectAmplitude').addEventListener('change', updateDisplaySettings);
     document.getElementById('selectTimeWindow').addEventListener('change', updateDisplaySettings);
+    
+    document.getElementById('btnExportCSV').addEventListener('click', () => exportData('csv'));
+    document.getElementById('btnExportEDF').addEventListener('click', () => exportData('edf'));
+    
+    // USB controls
+    document.getElementById('btnRefreshPorts').addEventListener('click', loadSerialPorts);
+    document.getElementById('btnUSBConnect').addEventListener('click', connectUSB);
+    document.getElementById('btnUSBDisconnect').addEventListener('click', disconnectUSB);
 }
 
 // ===== Drag and Drop =====
@@ -171,40 +257,30 @@ function setupDragAndDrop() {
     const uploadZone = document.getElementById('uploadZone');
     
     ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
-        uploadZone.addEventListener(eventName, preventDefaults, false);
+        uploadZone.addEventListener(eventName, (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+        }, false);
     });
     
-    function preventDefaults(e) {
-        e.preventDefault();
-        e.stopPropagation();
-    }
-    
     ['dragenter', 'dragover'].forEach(eventName => {
-        uploadZone.addEventListener(eventName, () => {
-            uploadZone.classList.add('dragging');
-        });
+        uploadZone.addEventListener(eventName, () => uploadZone.classList.add('dragging'));
     });
     
     ['dragleave', 'drop'].forEach(eventName => {
-        uploadZone.addEventListener(eventName, () => {
-            uploadZone.classList.remove('dragging');
-        });
+        uploadZone.addEventListener(eventName, () => uploadZone.classList.remove('dragging'));
     });
     
     uploadZone.addEventListener('drop', (e) => {
         const files = e.dataTransfer.files;
-        if (files.length > 0) {
-            uploadFile(files[0]);
-        }
+        if (files.length > 0) uploadFile(files[0]);
     });
 }
 
 // ===== File Upload =====
 function handleFileSelect(event) {
     const file = event.target.files[0];
-    if (file) {
-        uploadFile(file);
-    }
+    if (file) uploadFile(file);
 }
 
 async function uploadFile(file) {
@@ -225,17 +301,32 @@ async function uploadFile(file) {
             body: formData
         });
         
-        if (!response.ok) {
-            throw new Error(`Upload failed: ${response.statusText}`);
-        }
-        
         const data = await response.json();
         
         if (data.success) {
-            handleFileUploadSuccess(data);
+            state.usbMode = false;
+            state.fileInfo = data;
+            
+            document.getElementById('fileMetadata').style.display = 'block';
+            document.getElementById('metaFilename').textContent = data.original_filename || data.filename;
+            document.getElementById('metaChannels').textContent = data.n_channels;
+            document.getElementById('metaSamplingRate').textContent = `${data.sampling_rate} Hz`;
+            document.getElementById('metaDuration').textContent = `${data.duration.toFixed(2)} s`;
+            document.getElementById('metaSamples').textContent = data.n_samples.toLocaleString();
+            
+            state.eegData.channelNames = data.channels;
+            state.eegData.samplingRate = data.sampling_rate;
+            state.eegData.original.channels = new Array(data.n_channels).fill(null).map(() => []);
+            state.eegData.filtered.channels = new Array(data.n_channels).fill(null).map(() => []);
+            state.eegData.hasFilteredData = false;
+            
+            updateMaxPoints();
+            initializePlots();
+            
+            document.getElementById('btnStart').disabled = false;
+            updateExportStatus();
+            
             showToast('File loaded successfully!', 'success');
-        } else {
-            showToast('Failed to process file', 'error');
         }
         
     } catch (error) {
@@ -244,41 +335,9 @@ async function uploadFile(file) {
     }
 }
 
-function handleFileUploadSuccess(data) {
-    console.log('✅ File processed:', data);
-    
-    // Store file info
-    state.fileInfo = data;
-    
-    // Update metadata display
-    document.getElementById('fileMetadata').style.display = 'block';
-    document.getElementById('metaFilename').textContent = data.filename;
-    document.getElementById('metaChannels').textContent = data.n_channels;
-    document.getElementById('metaSamplingRate').textContent = `${data.sampling_rate} Hz`;
-    document.getElementById('metaDuration').textContent = `${data.duration.toFixed(2)} s`;
-    document.getElementById('metaSamples').textContent = data.n_samples.toLocaleString();
-    
-    // Initialize EEG data structure
-    state.eegData.channelNames = data.channels;
-    state.eegData.samplingRate = data.sampling_rate;
-    state.eegData.channels = new Array(data.n_channels).fill(null).map(() => []);
-    state.eegData.timeData = [];
-    
-    // Update max points
-    updateMaxPoints();
-    
-    // Initialize plot
-    initializePlot();
-    
-    // Enable controls
-    document.getElementById('btnStart').disabled = false;
-    
-    console.log('📊 Ready for visualization');
-}
-
 // ===== Streaming Controls =====
 function startStreaming() {
-    console.log('▶️ Starting stream');
+    console.log('▶️ Starting stream', state.usbMode ? '(USB MODE)' : '(FILE MODE)');
     sendWebSocketMessage({ type: 'start_stream' });
     
     document.getElementById('btnStart').disabled = true;
@@ -301,14 +360,10 @@ function stopStreaming() {
     document.getElementById('btnStart').disabled = false;
     document.getElementById('btnPause').disabled = true;
     document.getElementById('btnStop').disabled = true;
-    
-    // Reset data
-    state.eegData.channels = state.eegData.channels.map(() => []);
-    state.eegData.timeData = [];
 }
 
-function handleStreamStatus(status) {
-    console.log('Stream status:', status);
+function handleStreamStatus(status, mode) {
+    console.log('Stream status:', status, mode || '');
     
     const indicator = document.getElementById('streamIndicator');
     const indicatorText = indicator.querySelector('.indicator-text');
@@ -317,7 +372,7 @@ function handleStreamStatus(status) {
     
     if (status === 'started') {
         indicator.classList.add('streaming');
-        indicatorText.textContent = 'Streaming';
+        indicatorText.textContent = mode === 'usb' ? 'USB Streaming' : 'Streaming';
         state.eegData.isStreaming = true;
     } else if (status === 'paused') {
         indicatorText.textContent = 'Paused';
@@ -325,6 +380,10 @@ function handleStreamStatus(status) {
     } else if (status === 'stopped') {
         indicatorText.textContent = 'Idle';
         state.eegData.isStreaming = false;
+        
+        if (state.eegData.hasFilteredData) {
+            updateExportStatus();
+        }
     }
 }
 
@@ -334,60 +393,32 @@ function applyFilters() {
     
     const filters = [];
     
-    // High-Pass Filter
     if (document.getElementById('filterHighpass').checked) {
         const cutoff = parseFloat(document.getElementById('inputHighpass').value);
         if (cutoff > 0) {
-            sendWebSocketMessage({
-                type: 'update_filter',
-                filter_type: 'highpass',
-                cutoff: cutoff
-            });
+            sendWebSocketMessage({type: 'update_filter', filter_type: 'highpass', cutoff});
             filters.push(`HPF: ${cutoff} Hz`);
         }
     } else {
-        sendWebSocketMessage({
-            type: 'update_filter',
-            filter_type: 'highpass',
-            cutoff: 0
-        });
+        sendWebSocketMessage({type: 'update_filter', filter_type: 'highpass', cutoff: 0});
     }
     
-    // Low-Pass Filter
     if (document.getElementById('filterLowpass').checked) {
         const cutoff = parseFloat(document.getElementById('inputLowpass').value);
         if (cutoff > 0) {
-            sendWebSocketMessage({
-                type: 'update_filter',
-                filter_type: 'lowpass',
-                cutoff: cutoff
-            });
+            sendWebSocketMessage({type: 'update_filter', filter_type: 'lowpass', cutoff});
             filters.push(`LPF: ${cutoff} Hz`);
         }
     } else {
-        sendWebSocketMessage({
-            type: 'update_filter',
-            filter_type: 'lowpass',
-            cutoff: 0
-        });
+        sendWebSocketMessage({type: 'update_filter', filter_type: 'lowpass', cutoff: 0});
     }
     
-    // Notch Filter
     if (document.getElementById('filterNotch').checked) {
         const notchFreq = parseFloat(document.getElementById('selectNotch').value);
-        sendWebSocketMessage({
-            type: 'update_filter',
-            filter_type: 'notch',
-            notch_freq: notchFreq,
-            enabled: true
-        });
+        sendWebSocketMessage({type: 'update_filter', filter_type: 'notch', notch_freq: notchFreq, enabled: true});
         filters.push(`Notch: ${notchFreq} Hz`);
     } else {
-        sendWebSocketMessage({
-            type: 'update_filter',
-            filter_type: 'notch',
-            enabled: false
-        });
+        sendWebSocketMessage({type: 'update_filter', filter_type: 'notch', enabled: false});
     }
     
     updateActiveFiltersDisplay(filters);
@@ -409,9 +440,7 @@ function updateActiveFiltersDisplay(filters) {
     if (filters.length === 0) {
         container.innerHTML = '<p class="no-filters-text">No filters applied</p>';
     } else {
-        container.innerHTML = filters.map(f => 
-            `<span class="filter-tag">${f}</span>`
-        ).join('');
+        container.innerHTML = filters.map(f => `<span class="filter-tag">${f}</span>`).join('');
     }
 }
 
@@ -423,64 +452,80 @@ function updateDisplaySettings() {
     updateMaxPoints();
     
     if (state.eegData.channelNames.length > 0) {
-        updatePlotLayout();
+        updatePlotLayouts();
     }
 }
 
 function updateMaxPoints() {
-    state.eegData.maxPoints = Math.floor(
-        state.plotConfig.timeWindow * state.eegData.samplingRate
-    );
+    state.eegData.maxPoints = Math.floor(state.plotConfig.timeWindow * state.eegData.samplingRate);
 }
 
 // ===== EEG Data Handling =====
 function handleEEGData(data) {
-    const { channels, timestamp } = data;
+    const { original, filtered, timestamp } = data;
     
-    // Update time display
-    const timeValue = document.querySelector('.time-value');
-    timeValue.textContent = `${timestamp.toFixed(2)}s`;
+    document.querySelector('.time-value').textContent = `${timestamp.toFixed(2)}s`;
     
-    // Process data
-    for (let i = 0; i < channels.length; i++) {
-        const channelData = channels[i];
+    // Process original data
+    for (let i = 0; i < original.length; i++) {
+        const channelData = original[i];
         
         for (let j = 0; j < channelData.length; j++) {
-            state.eegData.channels[i].push(channelData[j]); 
+            state.eegData.original.channels[i].push(channelData[j]);
             
             if (i === 0) {
-                state.eegData.timeData.push(
-                    timestamp + (j / state.eegData.samplingRate)
-                );
+                state.eegData.original.timeData.push(timestamp + (j / state.eegData.samplingRate));
             }
         }
         
-        // Keep only latest points
-        if (state.eegData.channels[i].length > state.eegData.maxPoints) {
-            state.eegData.channels[i] = state.eegData.channels[i].slice(
-                -state.eegData.maxPoints
-            );
+        if (state.eegData.original.channels[i].length > state.eegData.maxPoints) {
+            state.eegData.original.channels[i] = state.eegData.original.channels[i].slice(-state.eegData.maxPoints);
+        }
+    }
+    
+    // Process filtered data
+    for (let i = 0; i < filtered.length; i++) {
+        const channelData = filtered[i];
+        
+        for (let j = 0; j < channelData.length; j++) {
+            state.eegData.filtered.channels[i].push(channelData[j]);
+            
+            if (i === 0) {
+                state.eegData.filtered.timeData.push(timestamp + (j / state.eegData.samplingRate));
+            }
+        }
+        
+        if (state.eegData.filtered.channels[i].length > state.eegData.maxPoints) {
+            state.eegData.filtered.channels[i] = state.eegData.filtered.channels[i].slice(-state.eegData.maxPoints);
         }
     }
     
     // Sync time data
-    if (state.eegData.timeData.length > state.eegData.maxPoints) {
-        state.eegData.timeData = state.eegData.timeData.slice(
-            -state.eegData.maxPoints
-        );
+    if (state.eegData.original.timeData.length > state.eegData.maxPoints) {
+        state.eegData.original.timeData = state.eegData.original.timeData.slice(-state.eegData.maxPoints);
     }
     
-    // Update plot
-    updatePlot();
+    if (state.eegData.filtered.timeData.length > state.eegData.maxPoints) {
+        state.eegData.filtered.timeData = state.eegData.filtered.timeData.slice(-state.eegData.maxPoints);
+    }
+    
+    state.eegData.hasFilteredData = true;
+    updatePlots();
 }
 
 // ===== Plotting Functions =====
-function initializePlot() {
-    console.log('📊 Initializing plot');
+function initializePlots() {
+    console.log('📊 Initializing plots');
     
-    // Hide placeholder, show plot
-    document.getElementById('plotPlaceholder').style.display = 'none';
-    document.getElementById('plotContainer').style.display = 'block';
+    initializePlot('Original', 'plotPlaceholderOriginal', 'plotContainerOriginal');
+    initializePlot('Filtered', 'plotPlaceholderFiltered', 'plotContainerFiltered');
+    
+    console.log('✅ Plots initialized');
+}
+
+function initializePlot(plotType, placeholderId, containerId) {
+    document.getElementById(placeholderId).style.display = 'none';
+    document.getElementById(containerId).style.display = 'block';
     
     const traces = [];
     const nChannels = state.eegData.channelNames.length;
@@ -500,31 +545,15 @@ function initializePlot() {
     }
     
     const layout = {
-        title: {
-            text: 'EEG Signal Visualization',
-            font: { color: '#f1f5f9', size: 18 }
-        },
+        title: {text: `${plotType} EEG Signal`, font: {color: '#f1f5f9', size: 16}},
         paper_bgcolor: '#1e293b',
         plot_bgcolor: '#0f172a',
-        font: { color: '#cbd5e1' },
-        xaxis: {
-            title: 'Time (seconds)',
-            gridcolor: '#334155',
-            color: '#cbd5e1'
-        },
-        yaxis: {
-            title: 'Amplitude (μV)',
-            gridcolor: '#334155',
-            color: '#cbd5e1',
-            range: calculateYAxisRange()
-        },
+        font: {color: '#cbd5e1'},
+        xaxis: {title: 'Time (seconds)', gridcolor: '#334155', color: '#cbd5e1'},
+        yaxis: {title: 'Amplitude (μV)', gridcolor: '#334155', color: '#cbd5e1', range: calculateYAxisRange()},
         showlegend: true,
-        legend: {
-            orientation: 'h',
-            y: -0.15,
-            font: { color: '#cbd5e1' }
-        },
-        margin: { t: 60, r: 50, b: 80, l: 80 },
+        legend: {orientation: 'h', y: -0.15, font: {color: '#cbd5e1', size: 10}},
+        margin: {t: 50, r: 40, b: 70, l: 70},
         hovermode: 'closest'
     };
     
@@ -535,41 +564,40 @@ function initializePlot() {
         modeBarButtonsToRemove: ['lasso2d', 'select2d']
     };
     
-    Plotly.newPlot('plotContainer', traces, layout, config); 
-    console.log('✅ Plot initialized');
+    Plotly.newPlot(containerId, traces, layout, config);
 }
 
-function updatePlot() {
-    if (!document.getElementById('plotContainer') || 
-        document.getElementById('plotContainer').style.display === 'none') {
-        return;
-    }
+function updatePlots() {
+    updatePlot('plotContainerOriginal', state.eegData.original);
+    updatePlot('plotContainerFiltered', state.eegData.filtered);
+}
+
+function updatePlot(containerId, dataSource) {
+    const container = document.getElementById(containerId);
+    if (!container || container.style.display === 'none') return;
     
-    const updates = { x: [], y: [] };
-    const nChannels = state.eegData.channels.length;
+    const updates = {x: [], y: []};
+    const nChannels = dataSource.channels.length;
     const spacing = calculateChannelSpacing();
     
     for (let i = 0; i < nChannels; i++) {
-        updates.x.push(state.eegData.timeData);
+        updates.x.push(dataSource.timeData);
         
-        // Add vertical offset for each channel
         const offset = (nChannels - 1 - i) * spacing;
-        const offsetData = state.eegData.channels[i].map(val => val + offset);
+        const offsetData = dataSource.channels[i].map(val => val + offset);
         updates.y.push(offsetData);
     }
     
-    const traceIndices = Array.from({ length: nChannels }, (_, i) => i);
-    Plotly.update('plotContainer', updates, {}, traceIndices);
+    const traceIndices = Array.from({length: nChannels}, (_, i) => i);
+    Plotly.update(containerId, updates, {}, traceIndices);
 }
 
-function updatePlotLayout() {
-    if (!document.getElementById('plotContainer') || 
-        document.getElementById('plotContainer').style.display === 'none') {
-        return;
-    }
-    
-    Plotly.relayout('plotContainer', {
-        'yaxis.range': calculateYAxisRange()
+function updatePlotLayouts() {
+    ['plotContainerOriginal', 'plotContainerFiltered'].forEach(containerId => {
+        const container = document.getElementById(containerId);
+        if (container && container.style.display !== 'none') {
+            Plotly.relayout(containerId, {'yaxis.range': calculateYAxisRange()});
+        }
     });
 }
 
@@ -593,6 +621,60 @@ function getChannelColor(index) {
         '#10b981', '#06b6d4', '#6366f1', '#a855f7'
     ];
     return colors[index % colors.length];
+}
+
+// ===== Export Functionality =====
+function updateExportStatus() {
+    const exportInfo = document.getElementById('exportInfo');
+    const exportStatus = exportInfo.querySelector('.export-status');
+    const btnExportCSV = document.getElementById('btnExportCSV');
+    const btnExportEDF = document.getElementById('btnExportEDF');
+    
+    if (state.eegData.hasFilteredData && !state.eegData.isStreaming) {
+        exportStatus.textContent = 'Filtered data ready for export';
+        exportStatus.classList.add('ready');
+        btnExportCSV.disabled = false;
+        btnExportEDF.disabled = false;
+    } else if (state.eegData.isStreaming) {
+        exportStatus.textContent = 'Stop streaming to export';
+        exportStatus.classList.remove('ready');
+        btnExportCSV.disabled = true;
+        btnExportEDF.disabled = true;
+    } else {
+        exportStatus.textContent = 'Stream data to enable export';
+        exportStatus.classList.remove('ready');
+        btnExportCSV.disabled = true;
+        btnExportEDF.disabled = true;
+    }
+}
+
+async function exportData(format) {
+    console.log(`💾 Exporting data as ${format.toUpperCase()}`);
+    showToast(`Exporting as ${format.toUpperCase()}...`, 'info');
+    
+    try {
+        const response = await fetch(`${CONFIG.API_URL}/api/export?format=${format}`, {
+            method: 'POST'
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            showToast(`Exported ${data.samples_exported.toLocaleString()} samples to ${data.filename}`, 'success');
+            
+            const downloadUrl = `${CONFIG.API_URL}/api/download/${data.filename}`;
+            const link = document.createElement('a');
+            link.href = downloadUrl;
+            link.download = data.filename;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+        
+    } catch (error) {
+        console.error('Export error:', error);
+        showToast(`Export failed: ${error.message}`, 'error');
+    }
 }
 
 // ===== UI Helper Functions =====
@@ -619,11 +701,5 @@ function showToast(message, type = 'info') {
     }, 3000);
 }
 
-// ===== Export for debugging =====
-window.EEGSystem = {
-    state,
-    CONFIG,
-    sendMessage: sendWebSocketMessage
-};
-
-console.log('💡 Debug: window.EEGSystem available'); 
+window.EEGSystem = {state, CONFIG, sendMessage: sendWebSocketMessage, exportData};
+console.log('💡 Debug: window.EEGSystem available');
