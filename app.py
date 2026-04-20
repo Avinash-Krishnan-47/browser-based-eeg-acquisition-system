@@ -3,7 +3,7 @@ EEG Acquisition System - FastAPI Backend
 National Institute of Technology, Tiruchirappalli
 Department: Instrumentation and Control Engineering
 Guide: Prof. V. Sridevi
-Enhanced with Filtered/Unfiltered Signal Comparison, Export, and USB Live Streaming
+Enhanced with Multiple Filter Types, Filtered/Unfiltered Signal Comparison, Export, and USB Live Streaming
 """
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, UploadFile, File, HTTPException
@@ -34,7 +34,7 @@ logger = logging.getLogger(__name__)
 app = FastAPI(
     title="EEG Acquisition System",
     description="Browser-based EEG signal visualization with USB streaming and export",
-    version="2.5.0"
+    version="3.0.0"
 )
 
 app.mount("/static", StaticFiles(directory="."), name="static")
@@ -70,6 +70,10 @@ class EEGState:
             'highpass': None,
             'lowpass': None,
             'notch': None
+        }
+        self.filter_types = {
+            'highpass': 'butterworth',  # Default filter type
+            'lowpass': 'butterworth'
         }
         self.connected_clients = set()
         self.filtered_data_buffer = []
@@ -110,14 +114,14 @@ state = EEGState()
 
 
 class EEGFilterBank:
-    """Signal processing for EEG data"""
+    """Signal processing for EEG data with multiple filter types"""
     
     def __init__(self, sampling_rate: float):
         self.fs = sampling_rate
         logger.info(f"Initialized FilterBank with sampling rate: {sampling_rate} Hz")
     
-    def design_highpass(self, cutoff_freq: float, order: int = 4):
-        """Design high-pass Butterworth filter"""
+    def design_highpass(self, cutoff_freq: float, order: int = 4, filter_type: str = 'butterworth'):
+        """Design high-pass filter with selectable type"""
         try:
             nyquist = self.fs / 2
             normalized_cutoff = cutoff_freq / nyquist
@@ -126,15 +130,42 @@ class EEGFilterBank:
                 logger.warning(f"Invalid highpass cutoff: {cutoff_freq} Hz")
                 return None
             
-            b, a = signal.butter(order, normalized_cutoff, btype='high')
-            logger.info(f"Designed highpass filter: {cutoff_freq} Hz")
-            return (b, a)
+            if filter_type == 'butterworth':
+                b, a = signal.butter(order, normalized_cutoff, btype='high')
+                logger.info(f"Designed Butterworth highpass filter: {cutoff_freq} Hz, order {order}")
+            
+            elif filter_type == 'chebyshev1':
+                # Chebyshev Type I - ripple in passband
+                ripple_db = 0.5  # 0.5 dB ripple in passband
+                b, a = signal.cheby1(order, ripple_db, normalized_cutoff, btype='high')
+                logger.info(f"Designed Chebyshev Type I highpass filter: {cutoff_freq} Hz, order {order}, ripple {ripple_db} dB")
+            
+            elif filter_type == 'chebyshev2':
+                # Chebyshev Type II - ripple in stopband
+                attenuation_db = 40  # 40 dB attenuation in stopband
+                b, a = signal.cheby2(order, attenuation_db, normalized_cutoff, btype='high')
+                logger.info(f"Designed Chebyshev Type II highpass filter: {cutoff_freq} Hz, order {order}, attenuation {attenuation_db} dB")
+            
+            elif filter_type == 'elliptic':
+                # Elliptic - ripple in both passband and stopband (sharpest transition)
+                passband_ripple_db = 0.5  # 0.5 dB ripple in passband
+                stopband_attenuation_db = 40  # 40 dB attenuation in stopband
+                b, a = signal.ellip(order, passband_ripple_db, stopband_attenuation_db, normalized_cutoff, btype='high')
+                logger.info(f"Designed Elliptic highpass filter: {cutoff_freq} Hz, order {order}, "
+                          f"passband ripple {passband_ripple_db} dB, stopband attenuation {stopband_attenuation_db} dB")
+            
+            else:
+                logger.warning(f"Unknown filter type: {filter_type}, using Butterworth")
+                b, a = signal.butter(order, normalized_cutoff, btype='high')
+            
+            return (b, a, filter_type)
+            
         except Exception as e:
             logger.error(f"Error designing highpass filter: {e}")
             return None
     
-    def design_lowpass(self, cutoff_freq: float, order: int = 4):
-        """Design low-pass Butterworth filter"""
+    def design_lowpass(self, cutoff_freq: float, order: int = 4, filter_type: str = 'butterworth'):
+        """Design low-pass filter with selectable type"""
         try:
             nyquist = self.fs / 2
             normalized_cutoff = cutoff_freq / nyquist
@@ -143,9 +174,36 @@ class EEGFilterBank:
                 logger.warning(f"Invalid lowpass cutoff: {cutoff_freq} Hz")
                 return None
             
-            b, a = signal.butter(order, normalized_cutoff, btype='low')
-            logger.info(f"Designed lowpass filter: {cutoff_freq} Hz")
-            return (b, a)
+            if filter_type == 'butterworth':
+                b, a = signal.butter(order, normalized_cutoff, btype='low')
+                logger.info(f"Designed Butterworth lowpass filter: {cutoff_freq} Hz, order {order}")
+            
+            elif filter_type == 'chebyshev1':
+                # Chebyshev Type I - ripple in passband
+                ripple_db = 0.5
+                b, a = signal.cheby1(order, ripple_db, normalized_cutoff, btype='low')
+                logger.info(f"Designed Chebyshev Type I lowpass filter: {cutoff_freq} Hz, order {order}, ripple {ripple_db} dB")
+            
+            elif filter_type == 'chebyshev2':
+                # Chebyshev Type II - ripple in stopband
+                attenuation_db = 40
+                b, a = signal.cheby2(order, attenuation_db, normalized_cutoff, btype='low')
+                logger.info(f"Designed Chebyshev Type II lowpass filter: {cutoff_freq} Hz, order {order}, attenuation {attenuation_db} dB")
+            
+            elif filter_type == 'elliptic':
+                # Elliptic - ripple in both passband and stopband
+                passband_ripple_db = 0.5
+                stopband_attenuation_db = 40
+                b, a = signal.ellip(order, passband_ripple_db, stopband_attenuation_db, normalized_cutoff, btype='low')
+                logger.info(f"Designed Elliptic lowpass filter: {cutoff_freq} Hz, order {order}, "
+                          f"passband ripple {passband_ripple_db} dB, stopband attenuation {stopband_attenuation_db} dB")
+            
+            else:
+                logger.warning(f"Unknown filter type: {filter_type}, using Butterworth")
+                b, a = signal.butter(order, normalized_cutoff, btype='low')
+            
+            return (b, a, filter_type)
+            
         except Exception as e:
             logger.error(f"Error designing lowpass filter: {e}")
             return None
@@ -155,7 +213,7 @@ class EEGFilterBank:
         try:
             b, a = signal.iirnotch(notch_freq, quality_factor, self.fs)
             logger.info(f"Designed notch filter: {notch_freq} Hz (Q={quality_factor})")
-            return (b, a)
+            return (b, a, 'notch')
         except Exception as e:
             logger.error(f"Error designing notch filter: {e}")
             return None
@@ -166,7 +224,7 @@ class EEGFilterBank:
             return data
         
         try:
-            b, a = filter_coeffs
+            b, a = filter_coeffs[0], filter_coeffs[1]
             filtered_data = np.zeros_like(data)
             
             for i in range(data.shape[0]):
@@ -457,12 +515,13 @@ async def health_check():
     """Health check endpoint"""
     return {
         "status": "healthy",
-        "version": "2.5.0",
+        "version": "3.0.0",
         "streaming": state.is_streaming,
         "data_loaded": state.current_data is not None,
         "has_filtered_data": len(state.filtered_data_buffer) > 0,
         "usb_mode": state.usb_mode,
-        "usb_active": state.usb_streaming_active
+        "usb_active": state.usb_streaming_active,
+        "filter_types": state.filter_types
     }
 
 
@@ -516,6 +575,10 @@ async def connect_usb(port: str, baudrate: int = 115200, n_channels: int = 8, sa
             'highpass': None,
             'lowpass': None,
             'notch': None
+        }
+        state.filter_types = {
+            'highpass': 'butterworth',
+            'lowpass': 'butterworth'
         }
         
         logger.info(f"USB connected: {port} @ {baudrate} baud, {n_channels} channels, {sampling_rate} Hz")
@@ -581,6 +644,10 @@ async def upload_file(file: UploadFile = File(...)):
             'highpass': None,
             'lowpass': None,
             'notch': None
+        }
+        state.filter_types = {
+            'highpass': 'butterworth',
+            'lowpass': 'butterworth'
         }
         state.current_position = 0
         state.filtered_data_buffer = []
@@ -819,13 +886,19 @@ async def handle_filter_update(websocket: WebSocket, data: dict):
     try:
         if filter_type == "highpass":
             cutoff = float(data.get("cutoff", 0))
+            filter_design = data.get("filter_design", "butterworth")  # NEW: Get filter design type
+            
+            # Store the filter type
+            state.filter_types['highpass'] = filter_design
+            
             if cutoff > 0:
-                state.active_filters['highpass'] = state.filter_bank.design_highpass(cutoff)
+                state.active_filters['highpass'] = state.filter_bank.design_highpass(cutoff, filter_type=filter_design)
                 await websocket.send_json({
                     "type": "filter_status",
                     "filter": "highpass",
                     "status": "applied",
-                    "cutoff": cutoff
+                    "cutoff": cutoff,
+                    "design": filter_design
                 })
             else:
                 state.active_filters['highpass'] = None
@@ -837,13 +910,19 @@ async def handle_filter_update(websocket: WebSocket, data: dict):
         
         elif filter_type == "lowpass":
             cutoff = float(data.get("cutoff", 0))
+            filter_design = data.get("filter_design", "butterworth")  # NEW: Get filter design type
+            
+            # Store the filter type
+            state.filter_types['lowpass'] = filter_design
+            
             if cutoff > 0:
-                state.active_filters['lowpass'] = state.filter_bank.design_lowpass(cutoff)
+                state.active_filters['lowpass'] = state.filter_bank.design_lowpass(cutoff, filter_type=filter_design)
                 await websocket.send_json({
                     "type": "filter_status",
                     "filter": "lowpass",
                     "status": "applied",
-                    "cutoff": cutoff
+                    "cutoff": cutoff,
+                    "design": filter_design
                 })
             else:
                 state.active_filters['lowpass'] = None
@@ -885,8 +964,8 @@ if __name__ == "__main__":
     import uvicorn
     
     print("=" * 70)
-    print("EEG Acquisition System - FastAPI Backend v2.5")
-    print("With USB Live Streaming Support")
+    print("EEG Acquisition System - FastAPI Backend v3.0")
+    print("With Multiple Filter Types and USB Live Streaming Support")
     print("=" * 70)
     print(f"Server: http://localhost:8000")
     print(f"Docs: http://localhost:8000/docs")

@@ -38,7 +38,7 @@ const state = {
 
 // ===== Initialization =====
 document.addEventListener('DOMContentLoaded', () => {
-    console.log('🧠 EEG Acquisition System with USB Initializing...');
+    console.log('🧠 EEG Acquisition System with Multiple Filter Types Initializing...');
     
     setTimeout(() => {
         document.getElementById('loadingScreen').classList.add('hidden');
@@ -49,7 +49,7 @@ document.addEventListener('DOMContentLoaded', () => {
     setupDragAndDrop();
     loadSerialPorts();
     
-    console.log('✅ System Ready with USB Support');
+    console.log('✅ System Ready with Butterworth, Chebyshev, and Elliptic Filters');
 });
 
 // ===== WebSocket Management =====
@@ -393,26 +393,47 @@ function applyFilters() {
     
     const filters = [];
     
+    // High-pass filter
     if (document.getElementById('filterHighpass').checked) {
         const cutoff = parseFloat(document.getElementById('inputHighpass').value);
+        const filterType = document.getElementById('selectHighpassType').value;
+        
         if (cutoff > 0) {
-            sendWebSocketMessage({type: 'update_filter', filter_type: 'highpass', cutoff});
-            filters.push(`HPF: ${cutoff} Hz`);
+            sendWebSocketMessage({
+                type: 'update_filter', 
+                filter_type: 'highpass', 
+                cutoff: cutoff,
+                filter_design: filterType
+            });
+            
+            const filterTypeName = getFilterTypeName(filterType);
+            filters.push(`HPF: ${cutoff} Hz (${filterTypeName})`);
         }
     } else {
         sendWebSocketMessage({type: 'update_filter', filter_type: 'highpass', cutoff: 0});
     }
     
+    // Low-pass filter
     if (document.getElementById('filterLowpass').checked) {
         const cutoff = parseFloat(document.getElementById('inputLowpass').value);
+        const filterType = document.getElementById('selectLowpassType').value;
+        
         if (cutoff > 0) {
-            sendWebSocketMessage({type: 'update_filter', filter_type: 'lowpass', cutoff});
-            filters.push(`LPF: ${cutoff} Hz`);
+            sendWebSocketMessage({
+                type: 'update_filter', 
+                filter_type: 'lowpass', 
+                cutoff: cutoff,
+                filter_design: filterType
+            });
+            
+            const filterTypeName = getFilterTypeName(filterType);
+            filters.push(`LPF: ${cutoff} Hz (${filterTypeName})`);
         }
     } else {
         sendWebSocketMessage({type: 'update_filter', filter_type: 'lowpass', cutoff: 0});
     }
     
+    // Notch filter
     if (document.getElementById('filterNotch').checked) {
         const notchFreq = parseFloat(document.getElementById('selectNotch').value);
         sendWebSocketMessage({type: 'update_filter', filter_type: 'notch', notch_freq: notchFreq, enabled: true});
@@ -424,11 +445,22 @@ function applyFilters() {
     updateActiveFiltersDisplay(filters);
 }
 
+function getFilterTypeName(filterType) {
+    const filterNames = {
+        'butterworth': 'Butterworth',
+        'chebyshev1': 'Chebyshev I',
+        'chebyshev2': 'Chebyshev II',
+        'elliptic': 'Elliptic'
+    };
+    return filterNames[filterType] || filterType;
+}
+
 function handleFilterStatus(message) {
-    const { filter, status } = message;
+    const { filter, status, design } = message;
     
     if (status === 'applied') {
-        showToast(`${filter} filter applied`, 'success');
+        const designName = design ? ` (${getFilterTypeName(design)})` : '';
+        showToast(`${filter} filter applied${designName}`, 'success');
     } else if (status === 'removed') {
         showToast(`${filter} filter removed`, 'info');
     }
