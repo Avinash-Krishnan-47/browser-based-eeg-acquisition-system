@@ -31,14 +31,15 @@ const state = {
     plotConfig: {
         amplitudeScale: 20,
         timeWindow: 10,
-        maxAmplitude: 200
+        baselineSpacing: 100  // Spacing between channel baselines in μV
     },
+    channelVisibility: [],  // Track visibility for each channel
     fileInfo: null
 };
 
 // ===== Initialization =====
 document.addEventListener('DOMContentLoaded', () => {
-    console.log('🧠 EEG Acquisition System with Multiple Filter Types Initializing...');
+    console.log('🧠 EEG Acquisition System Initializing...');
     
     setTimeout(() => {
         document.getElementById('loadingScreen').classList.add('hidden');
@@ -49,7 +50,7 @@ document.addEventListener('DOMContentLoaded', () => {
     setupDragAndDrop();
     loadSerialPorts();
     
-    console.log('✅ System Ready with Butterworth, Chebyshev, and Elliptic Filters');
+    console.log('✅ System Ready');
 });
 
 // ===== WebSocket Management =====
@@ -196,6 +197,7 @@ async function connectUSB() {
             state.eegData.samplingRate = sampling_rate;
             state.eegData.original.channels = new Array(n_channels).fill(null).map(() => []);
             state.eegData.filtered.channels = new Array(n_channels).fill(null).map(() => []);
+            state.channelVisibility = new Array(n_channels).fill(true);
             
             updateMaxPoints();
             initializePlots();
@@ -240,8 +242,15 @@ function setupEventListeners() {
     
     document.getElementById('btnApplyFilters').addEventListener('click', applyFilters);
     
-    document.getElementById('selectAmplitude').addEventListener('change', updateDisplaySettings);
-    document.getElementById('selectTimeWindow').addEventListener('change', updateDisplaySettings);
+    // CHANGE 5: Manual input for display settings
+    document.getElementById('inputAmplitude').addEventListener('change', updateDisplaySettings);
+    document.getElementById('inputTimeWindow').addEventListener('change', updateDisplaySettings);
+    document.getElementById('inputAmplitude').addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') updateDisplaySettings();
+    });
+    document.getElementById('inputTimeWindow').addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') updateDisplaySettings();
+    });
     
     document.getElementById('btnExportCSV').addEventListener('click', () => exportData('csv'));
     document.getElementById('btnExportEDF').addEventListener('click', () => exportData('edf'));
@@ -319,6 +328,7 @@ async function uploadFile(file) {
             state.eegData.original.channels = new Array(data.n_channels).fill(null).map(() => []);
             state.eegData.filtered.channels = new Array(data.n_channels).fill(null).map(() => []);
             state.eegData.hasFilteredData = false;
+            state.channelVisibility = new Array(data.n_channels).fill(true);
             
             updateMaxPoints();
             initializePlots();
@@ -476,15 +486,25 @@ function updateActiveFiltersDisplay(filters) {
     }
 }
 
-// ===== Display Settings =====
+// ===== Display Settings - CHANGE 5: Manual Input =====
 function updateDisplaySettings() {
-    state.plotConfig.amplitudeScale = parseFloat(document.getElementById('selectAmplitude').value);
-    state.plotConfig.timeWindow = parseFloat(document.getElementById('selectTimeWindow').value);
+    const ampValue = parseFloat(document.getElementById('inputAmplitude').value);
+    const timeValue = parseFloat(document.getElementById('inputTimeWindow').value);
+    
+    if (!isNaN(ampValue) && ampValue > 0) {
+        state.plotConfig.amplitudeScale = ampValue;
+        state.plotConfig.baselineSpacing = ampValue * 5;
+    }
+    
+    if (!isNaN(timeValue) && timeValue > 0) {
+        state.plotConfig.timeWindow = timeValue;
+    }
     
     updateMaxPoints();
     
     if (state.eegData.channelNames.length > 0) {
         updatePlotLayouts();
+        showToast(`Display updated: ${state.plotConfig.amplitudeScale}μV, ${state.plotConfig.timeWindow}s`, 'success');
     }
 }
 
@@ -572,7 +592,12 @@ function initializePlot(plotType, placeholderId, containerId) {
             line: {
                 color: getChannelColor(i),
                 width: 1.5
-            }
+            },
+            // CHANGE 2: Show legend on right for click toggle
+            showlegend: true,
+            // CHANGE 1: Store raw values in customdata for baseline-independent display
+            customdata: [],
+            hovertemplate: '<b>%{fullData.name}</b><br>Time: %{x:.3f}s<br>Value: %{customdata:.2f} μV<extra></extra>'
         });
     }
     
@@ -581,12 +606,60 @@ function initializePlot(plotType, placeholderId, containerId) {
         paper_bgcolor: '#1e293b',
         plot_bgcolor: '#0f172a',
         font: {color: '#cbd5e1'},
-        xaxis: {title: 'Time (seconds)', gridcolor: '#334155', color: '#cbd5e1'},
-        yaxis: {title: 'Amplitude (μV)', gridcolor: '#334155', color: '#cbd5e1', range: calculateYAxisRange()},
+        xaxis: {
+            title: 'Time (seconds)', 
+            gridcolor: '#334155', 
+            color: '#cbd5e1',
+            zeroline: false,
+            // CHANGE 3: Enable crosshair
+            showspikes: true,
+            spikecolor: '#60a5fa',
+            spikethickness: 1,
+            spikedash: 'solid',
+            spikemode: 'across'
+        },
+        yaxis: {
+            title: 'Channel', 
+            gridcolor: '#334155', 
+            color: '#cbd5e1', 
+            range: calculateYAxisRange(),
+            tickmode: 'array',
+            tickvals: getChannelTickPositions(),
+            ticktext: getChannelTickLabels(),
+            tickfont: {
+                size: 11,
+                color: '#cbd5e1',
+                family: 'monospace'
+            },
+            zeroline: false,
+            // CHANGE 3: Enable crosshair
+            showspikes: true,
+            spikecolor: '#60a5fa',
+            spikethickness: 1,
+            spikedash: 'solid',
+            spikemode: 'across'
+        },
+        // CHANGE 4: Legend on right side
         showlegend: true,
-        legend: {orientation: 'h', y: -0.15, font: {color: '#cbd5e1', size: 10}},
-        margin: {t: 50, r: 40, b: 70, l: 70},
-        hovermode: 'closest'
+        legend: {
+            x: 1.02,
+            y: 1,
+            xanchor: 'left',
+            yanchor: 'top',
+            bgcolor: 'rgba(30, 41, 59, 0.9)',
+            bordercolor: '#334155',
+            borderwidth: 1,
+            font: {
+                size: 10,
+                color: '#cbd5e1'
+            }
+        },
+        margin: {t: 50, r: 150, b: 70, l: 100},
+        // CHANGE 3: Unified hover mode with crosshair
+        hovermode: 'x unified',
+        hoverdistance: 50,
+        spikedistance: -1,
+        shapes: getBaselineShapes()
     };
     
     const config = {
@@ -597,6 +670,64 @@ function initializePlot(plotType, placeholderId, containerId) {
     };
     
     Plotly.newPlot(containerId, traces, layout, config);
+    
+    // CHANGE 2: Handle legend click for toggling channels
+    const plotDiv = document.getElementById(containerId);
+    plotDiv.on('plotly_legendclick', function(data) {
+        const curveNumber = data.curveNumber;
+        state.channelVisibility[curveNumber] = !state.channelVisibility[curveNumber];
+        
+        // Sync visibility to other plot
+        const otherPlot = containerId === 'plotContainerOriginal' ? 'plotContainerFiltered' : 'plotContainerOriginal';
+        const otherDiv = document.getElementById(otherPlot);
+        if (otherDiv && otherDiv.data) {
+            Plotly.restyle(otherPlot, {visible: state.channelVisibility[curveNumber]}, [curveNumber]);
+        }
+        
+        return true; // Allow default Plotly behavior
+    });
+}
+
+function getChannelTickPositions() {
+    const nChannels = state.eegData.channelNames.length;
+    const positions = [];
+    
+    for (let i = 0; i < nChannels; i++) {
+        // CHANGE 1: Each channel baseline at i * spacing
+        const baseline = i * state.plotConfig.baselineSpacing;
+        positions.push(baseline);
+    }
+    
+    return positions;
+}
+
+function getChannelTickLabels() {
+    return state.eegData.channelNames;
+}
+
+function getBaselineShapes() {
+    const nChannels = state.eegData.channelNames.length;
+    const shapes = [];
+    
+    for (let i = 0; i < nChannels; i++) {
+        const baseline = i * state.plotConfig.baselineSpacing;
+        shapes.push({
+            type: 'line',
+            x0: 0,
+            x1: 1,
+            xref: 'paper',
+            y0: baseline,
+            y1: baseline,
+            yref: 'y',
+            line: {
+                color: '#475569',
+                width: 1,
+                dash: 'dot'
+            }
+        });
+    }
+    
+    return shapes;
 }
 
 function updatePlots() {
@@ -608,16 +739,22 @@ function updatePlot(containerId, dataSource) {
     const container = document.getElementById(containerId);
     if (!container || container.style.display === 'none') return;
     
-    const updates = {x: [], y: []};
+    const updates = {x: [], y: [], customdata: [], visible: []};
     const nChannels = dataSource.channels.length;
-    const spacing = calculateChannelSpacing();
     
     for (let i = 0; i < nChannels; i++) {
         updates.x.push(dataSource.timeData);
         
-        const offset = (nChannels - 1 - i) * spacing;
-        const offsetData = dataSource.channels[i].map(val => val + offset);
+        // CHANGE 1: Apply baseline offset for display
+        const baseline = i * state.plotConfig.baselineSpacing;
+        const offsetData = dataSource.channels[i].map(val => val + baseline);
         updates.y.push(offsetData);
+        
+        // Store raw values for hover display
+        updates.customdata.push(dataSource.channels[i]);
+        
+        // Apply visibility
+        updates.visible.push(state.channelVisibility[i]);
     }
     
     const traceIndices = Array.from({length: nChannels}, (_, i) => i);
@@ -628,29 +765,31 @@ function updatePlotLayouts() {
     ['plotContainerOriginal', 'plotContainerFiltered'].forEach(containerId => {
         const container = document.getElementById(containerId);
         if (container && container.style.display !== 'none') {
-            Plotly.relayout(containerId, {'yaxis.range': calculateYAxisRange()});
+            Plotly.relayout(containerId, {
+                'yaxis.range': calculateYAxisRange(),
+                'yaxis.tickvals': getChannelTickPositions(),
+                'yaxis.ticktext': getChannelTickLabels(),
+                'shapes': getBaselineShapes()
+            });
         }
     });
 }
 
-function calculateChannelSpacing() {
-    const nChannels = state.eegData.channelNames.length;
-    if (nChannels <= 1) return 0;
-    return state.plotConfig.amplitudeScale * 4;
-}
-
 function calculateYAxisRange() {
     const nChannels = state.eegData.channelNames.length;
-    const spacing = calculateChannelSpacing();
-    const totalRange = spacing * (nChannels - 1) + state.plotConfig.maxAmplitude;
+    if (nChannels === 0) return [-100, 100];
     
-    return [-state.plotConfig.maxAmplitude / 2, totalRange];
+    const totalHeight = (nChannels - 1) * state.plotConfig.baselineSpacing;
+    const padding = state.plotConfig.amplitudeScale * 3;
+    
+    return [-padding, totalHeight + padding];
 }
 
 function getChannelColor(index) {
     const colors = [
         '#3b82f6', '#8b5cf6', '#ec4899', '#f59e0b',
-        '#10b981', '#06b6d4', '#6366f1', '#a855f7'
+        '#10b981', '#06b6d4', '#6366f1', '#a855f7',
+        '#14b8a6', '#f43f5e', '#84cc16', '#fb923c'
     ];
     return colors[index % colors.length];
 }

@@ -268,7 +268,7 @@
                     </section>
 
                     <!-- Display Settings -->
-                    <section class="control-section">
+                    <!-- <section class="control-section">
                         <h3 class="section-title">
                             <span class="icon">📐</span>
                             Display Settings
@@ -295,10 +295,34 @@
                                 <option value="30">30 seconds</option>
                             </select>
                         </div>
-                    </section>
+                    </section> -->
 
                     <!-- Export Section -->
                     <section class="control-section">
+                        <h3 class="section-title">
+                            <span class="icon">📐</span>
+                            Display Settings
+                        </h3>
+                        
+                        <div class="setting-item">
+                            <label class="setting-label">Amplitude Scale (μV/cm)</label>
+                            <div class="input-group">
+                                <input type="number" id="inputAmplitude" class="filter-input" 
+                                       value="20" min="1" max="1000" step="1">
+                                <span class="input-suffix">μV</span>
+                            </div>
+                        </div>
+
+                        <div class="setting-item">
+                            <label class="setting-label">Time Window (seconds)</label>
+                            <div class="input-group">
+                                <input type="number" id="inputTimeWindow" class="filter-input" 
+                                       value="10" min="1" max="60" step="1">
+                                <span class="input-suffix">s</span>
+                            </div>
+                        </div>
+                    </section> 
+                    <!-- <section class="control-section">
                         <h3 class="section-title">
                             <span class="icon">💾</span>
                             Export Filtered Data
@@ -318,7 +342,7 @@
                                 <span>Export as EDF</span>
                             </button>
                         </div>
-                    </section>
+                    </section> -->
 
                     <!-- Active Filters -->
                     <section class="control-section">
