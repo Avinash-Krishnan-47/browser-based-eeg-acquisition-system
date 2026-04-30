@@ -1036,3 +1036,362 @@ body {
         min-height: 300px;
     }
 }
+/* ============================================================
+   LAYOUT PATCH — append to the END of your styles.css
+   Adds: layout toggle, resize handle, focus modes, expand btn
+   ============================================================ */
+
+/* ── Viz Header row ── */
+.viz-header {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    margin-bottom: 1.25rem;
+}
+
+.viz-controls-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+}
+
+/* ── Layout Toggle Pills ── */
+.layout-toggle-group {
+    display: flex;
+    gap: 0.35rem;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 0.75rem;
+    padding: 0.3rem;
+}
+
+.layout-btn {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.4rem 0.85rem;
+    border: none;
+    border-radius: 0.5rem;
+    background: transparent;
+    color: var(--text-muted);
+    font-size: 0.78rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: var(--transition);
+    white-space: nowrap;
+}
+
+.layout-btn svg {
+    flex-shrink: 0;
+}
+
+.layout-btn:hover {
+    color: var(--text-primary);
+    background: var(--bg-tertiary);
+}
+
+.layout-btn.active {
+    background: var(--primary);
+    color: #fff;
+    box-shadow: 0 2px 8px rgba(59,130,246,0.35);
+}
+
+/* ── Dual Plot Container — layout modes ── */
+.dual-plot-container {
+    flex: 1;
+    display: flex;
+    gap: 0;                  /* gap handled per-mode */
+    min-height: 0;
+    transition: all 0.35s cubic-bezier(0.4,0,0.2,1);
+}
+
+/* DEFAULT: split (stacked vertically, equal height) */
+.dual-plot-container[data-layout="split"] {
+    flex-direction: column;
+    gap: 0;
+}
+
+.dual-plot-container[data-layout="split"] .plot-section {
+    flex: 1;
+    min-height: 340px;
+}
+
+/* Side by side */
+.dual-plot-container[data-layout="side"] {
+    flex-direction: row;
+    gap: 1.25rem;
+}
+
+.dual-plot-container[data-layout="side"] .plot-section {
+    flex: 1;
+    min-height: 500px;
+}
+
+.dual-plot-container[data-layout="side"] .resize-handle {
+    display: none;
+}
+
+/* Focus Original — original gets ~65%, filtered gets ~35% */
+.dual-plot-container[data-layout="focus-original"] {
+    flex-direction: column;
+    gap: 0;
+}
+
+.dual-plot-container[data-layout="focus-original"] #plotSectionOriginal {
+    flex: 65;
+    min-height: 320px;
+}
+
+.dual-plot-container[data-layout="focus-original"] #plotSectionFiltered {
+    flex: 35;
+    min-height: 180px;
+}
+
+.dual-plot-container[data-layout="focus-original"] #plotSectionFiltered .plot-wrapper {
+    min-height: 140px;
+}
+
+/* Focus Filtered — filtered gets ~65%, original gets ~35% */
+.dual-plot-container[data-layout="focus-filtered"] {
+    flex-direction: column;
+    gap: 0;
+}
+
+.dual-plot-container[data-layout="focus-filtered"] #plotSectionFiltered {
+    flex: 65;
+    min-height: 320px;
+}
+
+.dual-plot-container[data-layout="focus-filtered"] #plotSectionOriginal {
+    flex: 35;
+    min-height: 180px;
+}
+
+.dual-plot-container[data-layout="focus-filtered"] #plotSectionOriginal .plot-wrapper {
+    min-height: 140px;
+}
+
+/* ── Resize Handle (split mode only) ── */
+.resize-handle {
+    height: 12px;
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: ns-resize;
+    user-select: none;
+    flex-shrink: 0;
+    position: relative;
+    z-index: 10;
+    margin: 0.15rem 0;
+}
+
+.resize-handle:hover .resize-dots span {
+    background: var(--primary);
+    transform: scaleX(1.4);
+}
+
+.resize-dots {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+}
+
+.resize-dots span {
+    display: block;
+    width: 24px;
+    height: 3px;
+    background: var(--border-light);
+    border-radius: 2px;
+    transition: var(--transition);
+}
+
+/* Hide resize handle in non-split layouts */
+.dual-plot-container:not([data-layout="split"]) .resize-handle {
+    display: none;
+}
+
+/* ── Plot Section ── */
+.plot-section {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    transition: flex 0.35s cubic-bezier(0.4,0,0.2,1);
+    /* Add padding between sections in split mode */
+}
+
+.dual-plot-container[data-layout="split"] .plot-section {
+    padding-bottom: 0.5rem;
+}
+
+.dual-plot-container[data-layout="split"] .plot-section:last-of-type {
+    padding-bottom: 0;
+    padding-top: 0.5rem;
+}
+
+/* ── Plot Header Actions ── */
+.plot-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 0.6rem;
+}
+
+.plot-header-actions {
+    display: flex;
+    gap: 0.4rem;
+}
+
+.plot-action-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    border: 1px solid var(--border);
+    border-radius: 0.5rem;
+    background: var(--bg-tertiary);
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: var(--transition);
+}
+
+.plot-action-btn:hover {
+    background: var(--primary);
+    border-color: var(--primary);
+    color: #fff;
+    transform: scale(1.08);
+}
+
+/* ── Plot Wrapper — fills its section ── */
+.plot-wrapper {
+    flex: 1;
+    min-height: 0;          /* critical: allows flex child to shrink */
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 1rem;
+    padding: 1rem 1.25rem;
+    box-shadow: var(--shadow-xl);
+    display: flex;
+    align-items: stretch;
+    justify-content: stretch;
+    overflow: hidden;
+    transition: border-color 0.25s;
+}
+
+.plot-wrapper:hover {
+    border-color: var(--border-light);
+}
+
+/* Plotly container must fill wrapper */
+#plotContainerOriginal,
+#plotContainerFiltered {
+    width: 100% !important;
+    height: 100% !important;
+    min-height: 260px;
+}
+
+/* ── Fullscreen / Expand mode ── */
+.plot-section.is-expanded {
+    position: fixed !important;
+    inset: 0 !important;
+    z-index: 500 !important;
+    padding: 1.5rem !important;
+    background: var(--bg-primary) !important;
+    display: flex !important;
+    flex-direction: column !important;
+}
+
+.plot-section.is-expanded .plot-wrapper {
+    flex: 1;
+    border-radius: 1rem;
+    min-height: 0;
+}
+
+/* Overlay for the OTHER plot when one is expanded */
+.plot-section.is-hidden-by-expand {
+    visibility: hidden;
+    pointer-events: none;
+}
+
+/* ── Responsive tweaks ── */
+@media (max-width: 1400px) {
+    /* side-by-side becomes split on small screens */
+    .dual-plot-container[data-layout="side"] {
+        flex-direction: column;
+    }
+    .dual-plot-container[data-layout="side"] .plot-section {
+        min-height: 340px;
+    }
+}
+
+@media (max-width: 900px) {
+    .layout-btn span {
+        display: none;     /* icon only on very narrow screens */
+    }
+    .layout-btn {
+        padding: 0.4rem 0.55rem;
+    }
+}
+/* ============================================================
+   SIDE LAYOUT FIX — append this to the very END of styles.css
+   (after all existing rules including the layout patch)
+   
+   The problem: the original .dual-plot-container base rule and
+   .plot-section min-height rule override the side layout because
+   they are lower in specificity battle or appear later.
+   We fix this by using !important only on the specific properties
+   that conflict, and by overriding .plot-section min-height
+   specifically under the side layout attribute selector.
+   ============================================================ */
+
+/* ── Force side-by-side layout ── */
+.dual-plot-container[data-layout="side"] {
+    flex-direction: row !important;
+    gap: 1.25rem !important;
+    align-items: stretch !important;
+}
+
+/* Each plot section in side mode: equal width, full height */
+.dual-plot-container[data-layout="side"] .plot-section {
+    flex: 1 1 0 !important;
+    min-width: 0 !important;          /* critical: prevents flex overflow */
+    min-height: 500px !important;
+    height: auto !important;          /* clear any drag-set pixel height */
+    width: auto !important;
+}
+
+/* Plot wrapper fills its section in side mode */
+.dual-plot-container[data-layout="side"] .plot-wrapper {
+    min-height: 450px !important;
+}
+
+/* Plotly containers in side mode must fill their wrapper */
+.dual-plot-container[data-layout="side"] #plotContainerOriginal,
+.dual-plot-container[data-layout="side"] #plotContainerFiltered {
+    min-height: 420px !important;
+}
+
+/* Resize handle is irrelevant in side mode */
+.dual-plot-container[data-layout="side"] .resize-handle {
+    display: none !important;
+}
+
+/* Remove the split-mode padding that was added per plot-section */
+.dual-plot-container[data-layout="side"] .plot-section {
+    padding-bottom: 0 !important;
+    padding-top:    0 !important;
+}
+
+/* Responsive: collapse to stacked on narrow screens */
+@media (max-width: 1100px) {
+    .dual-plot-container[data-layout="side"] {
+        flex-direction: column !important;
+    }
+    .dual-plot-container[data-layout="side"] .plot-section {
+        min-height: 340px !important;
+        width: 100% !important;
+    }
+}

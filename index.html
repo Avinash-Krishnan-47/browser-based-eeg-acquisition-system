@@ -359,58 +359,106 @@
 
             <!-- Main Visualization Area -->
             <main class="main-area">
-                <div class="viz-header">
-                    <h2 class="viz-title">EEG Signal Comparison</h2>
-                    <div class="viz-info">
-                        <div class="time-display" id="timeDisplay">
-                            <span class="time-label">Time:</span>
-                            <span class="time-value">0.00s</span>
-                        </div>
+ 
+    <!-- ── Viz Header with Layout Controls ── -->
+    <div class="viz-header">
+        <h2 class="viz-title">EEG Signal Comparison</h2>
+        <div class="viz-controls-row">
+            <!-- Layout toggle pills -->
+            <div class="layout-toggle-group" id="layoutToggleGroup">
+                <button class="layout-btn active" data-layout="split"       title="Stack vertically">
+                    <svg width="18" height="18" viewBox="0 0 18 18"><rect x="1" y="1" width="16" height="7" rx="1.5" fill="currentColor" opacity="0.9"/><rect x="1" y="10" width="16" height="7" rx="1.5" fill="currentColor" opacity="0.9"/></svg>
+                    <span>Split</span>
+                </button>
+                <button class="layout-btn" data-layout="side"              title="Side by side">
+                    <svg width="18" height="18" viewBox="0 0 18 18"><rect x="1" y="1" width="7" height="16" rx="1.5" fill="currentColor" opacity="0.9"/><rect x="10" y="1" width="7" height="16" rx="1.5" fill="currentColor" opacity="0.9"/></svg>
+                    <span>Side</span>
+                </button>
+                <button class="layout-btn" data-layout="focus-original"    title="Focus Original">
+                    <svg width="18" height="18" viewBox="0 0 18 18"><rect x="1" y="1" width="16" height="11" rx="1.5" fill="currentColor" opacity="0.9"/><rect x="1" y="14" width="16" height="3" rx="1" fill="currentColor" opacity="0.35"/></svg>
+                    <span>Original</span>
+                </button>
+                <button class="layout-btn" data-layout="focus-filtered"    title="Focus Filtered">
+                    <svg width="18" height="18" viewBox="0 0 18 18"><rect x="1" y="1" width="16" height="3" rx="1" fill="currentColor" opacity="0.35"/><rect x="1" y="6" width="16" height="11" rx="1.5" fill="currentColor" opacity="0.9"/></svg>
+                    <span>Filtered</span>
+                </button>
+            </div>
+ 
+            <div class="time-display" id="timeDisplay">
+                <span class="time-label">Time:</span>
+                <span class="time-value">0.00s</span>
+            </div>
+        </div>
+    </div>
+ 
+    <!-- ── Dual Plot Container (layout-aware) ── -->
+    <div class="dual-plot-container" id="dualPlotContainer" data-layout="split">
+ 
+        <!-- Original Signal Plot -->
+        <div class="plot-section" id="plotSectionOriginal">
+            <div class="plot-header">
+                <h3 class="plot-title">
+                    <span class="signal-indicator original"></span>
+                    Original Signal
+                </h3>
+                <div class="plot-header-actions">
+                    <button class="plot-action-btn" id="btnExpandOriginal" title="Expand / Collapse">
+                        <svg width="15" height="15" viewBox="0 0 15 15" fill="none" stroke="currentColor" stroke-width="1.8">
+                            <path d="M2 2h4M2 2v4M13 2h-4M13 2v4M2 13h4M2 13v-4M13 13h-4M13 13v-4"/>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+            <div class="plot-wrapper" id="plotWrapperOriginal">
+                <div class="plot-placeholder" id="plotPlaceholderOriginal">
+                    <div class="placeholder-content">
+                        <div class="placeholder-icon">📈</div>
+                        <h3>No Data Available</h3>
+                        <p>Upload EDF file or connect USB device</p>
                     </div>
                 </div>
-
-                <div class="dual-plot-container">
-                    <!-- Original Signal Plot -->
-                    <div class="plot-section">
-                        <div class="plot-header">
-                            <h3 class="plot-title">
-                                <span class="signal-indicator original"></span>
-                                Original Signal
-                            </h3>
-                        </div>
-                        <div class="plot-wrapper" id="plotWrapperOriginal">
-                            <div class="plot-placeholder" id="plotPlaceholderOriginal">
-                                <div class="placeholder-content">
-                                    <div class="placeholder-icon">📈</div>
-                                    <h3>No Data Available</h3>
-                                    <p>Upload EDF file or connect USB device</p>
-                                </div>
-                            </div>
-                            <div id="plotContainerOriginal" style="display: none; width: 100%; height: 100%;"></div>
-                        </div>
-                    </div>
-
-                    <!-- Filtered Signal Plot -->
-                    <div class="plot-section">
-                        <div class="plot-header">
-                            <h3 class="plot-title">
-                                <span class="signal-indicator filtered"></span>
-                                Filtered Signal
-                            </h3>
-                        </div>
-                        <div class="plot-wrapper" id="plotWrapperFiltered">
-                            <div class="plot-placeholder" id="plotPlaceholderFiltered">
-                                <div class="placeholder-content">
-                                    <div class="placeholder-icon">📊</div>
-                                    <h3>No Data Available</h3>
-                                    <p>Apply filters to see results</p>
-                                </div>
-                            </div>
-                            <div id="plotContainerFiltered" style="display: none; width: 100%; height: 100%;"></div>
-                        </div>
+                <div id="plotContainerOriginal" style="display:none; width:100%; height:100%;"></div>
+            </div>
+        </div>
+ 
+        <!-- Resize Handle (visible in split mode) -->
+        <div class="resize-handle" id="resizeHandle">
+            <div class="resize-dots">
+                <span></span><span></span><span></span>
+            </div>
+        </div>
+ 
+        <!-- Filtered Signal Plot -->
+        <div class="plot-section" id="plotSectionFiltered">
+            <div class="plot-header">
+                <h3 class="plot-title">
+                    <span class="signal-indicator filtered"></span>
+                    Filtered Signal
+                </h3>
+                <div class="plot-header-actions">
+                    <button class="plot-action-btn" id="btnExpandFiltered" title="Expand / Collapse">
+                        <svg width="15" height="15" viewBox="0 0 15 15" fill="none" stroke="currentColor" stroke-width="1.8">
+                            <path d="M2 2h4M2 2v4M13 2h-4M13 2v4M2 13h4M2 13v-4M13 13h-4M13 13v-4"/>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+            <div class="plot-wrapper" id="plotWrapperFiltered">
+                <div class="plot-placeholder" id="plotPlaceholderFiltered">
+                    <div class="placeholder-content">
+                        <div class="placeholder-icon">📊</div>
+                        <h3>No Data Available</h3>
+                        <p>Apply filters to see results</p>
                     </div>
                 </div>
-            </main>
+                <div id="plotContainerFiltered" style="display:none; width:100%; height:100%;"></div>
+            </div>
+        </div>
+ 
+    </div><!-- /.dual-plot-container -->
+ 
+</main>
+
         </div>
 
         <!-- Footer -->
